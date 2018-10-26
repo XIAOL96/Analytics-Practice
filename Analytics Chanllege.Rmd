@@ -1,0 +1,301 @@
+---
+title: "Data Analysis and Marketing Recommendations"
+header-includes: \usepackage{multirow}
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+  pdf_document:
+    highlight: pygments
+    number_sections: no
+    toc: yes
+    toc_depth: 3
+fontsize: 12pt
+---
+
+
+# 1 Data 
+
+
+Two datasets are used for this analysis: "visitor.csv" and "quotes.csv". "visitor.csv" contains a list of unique visitors who started request forms in either house cleaning or local moving categories from August 1 to August 28 of 2016. It has 59996 observations and 8 variables. "quotes.csv" contains a list of quotes that professionals sent in response to customer requests.It has a total of 64330 observations and 5 variables.   
+
+
+# 2 Analysis
+
+
+The following R packages were used: <br>
+'plotly' for interactive plotting, 'dplyr' for data manipulation, 'lubridate' for date conversion, 'knitr' and 'kableExtra' for knitting report with customized styles.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Please first check and load the following packages into your R or RStudio platform. 
+rm(list = ls()) # clean global environment
+mypackages = c("plotly", "dplyr", "lubridate", "knitr", "kableExtra")   
+tmp = setdiff(mypackages, rownames(installed.packages())) 
+if (length(tmp) > 0) install.packages(tmp)
+library(plotly) # for interactive plotting
+library(dplyr) # data manipulation
+library(lubridate) # date manipulation
+library(knitr) # knitting report
+library(kableExtra) # knitting report
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Read in data
+# Please change the path of documents and read data "visitors.csv" and "quotes.csv".
+
+visitors = read.csv("/Users/Xiao/Downloads/visitors.csv",header = TRUE,stringsAsFactors = FALSE)
+quotes = read.csv("/Users/Xiao/Downloads/quotes.csv",header = TRUE,stringsAsFactors = FALSE)
+
+# 1. 'visitors.csv'
+visitors$session_date = as.Date(visitors$session_date,format = "%m/%d/%y") #convert to date format
+visitors$device = as.factor(visitors$device)
+visitors$category_name = as.factor(visitors$category_name)
+visitors$sent_request = factor(visitors$sent_request, levels = c(1,0), labels = c('yes', 'no'), ordered = FALSE)
+visitors$request_id = as.factor(visitors$request_id)
+visitors$how_far = as.factor(visitors$how_far)
+visitors$num_bedrooms = as.factor(visitors$num_bedrooms)
+visitors$num_bathrooms = as.factor(visitors$num_bathrooms)
+
+# 2. 'quotes.csv'
+quotes$request_id = as.factor(quotes$request_id)
+quotes$quote_id = as.factor(quotes$quote_id)
+quotes$hired = factor(quotes$hired, levels = c(0,1), labels = c('Not Hired', 'Hired'), ordered = FALSE)
+quotes$pro_id = as.factor(quotes$pro_id)
+```
+
+
+## 2.1 Visters and Conversion Rate
+
+
+### 2.1.1 
+
+```{r echo=FALSE, fig.align='center', fig.height=4.0, fig.width=4.8, message=FALSE, warning=FALSE}
+visitors_change = visitors %>% group_by(session_date) %>%
+  summarise(num_visitors = length(session_date)) # number of visitors aggregated at date level 
+visitors_change$day = weekdays(visitors_change$session_date) # adding day of week 
+visitors_change %>% plot_ly (x = ~session_date, y = ~num_visitors, text = ~day,type="scatter",mode = 'lines+markers') %>% layout(title = "Number of Visitors over Time", xaxis = list(title = 'Session Date'), yaxis = list(title = 'Number of Visitors'))
+```
+
+From the above line chart of number of visitors from August 1st to August 28th, we see that the number of visitors reached the peak on every Monday of each week. After Monday, the number of visitors started to decrease. The number of visitors decreased to its minimum during a week on either Saturday or Sunday.
+
+### 2.1.2 
+
+```{r echo=FALSE, fig.align='center', fig.height=4.0, fig.width=4.0, message=FALSE, warning=FALSE}
+df = data.frame(V1 = c("yes", "no"), V2 = c(table(visitors$sent_request)[1], table(visitors$sent_request)[2]))
+rownames(df) = NULL
+plot_ly(df, labels = ~V1, values = ~V2, type = 'pie')
+```
+
+From August 1st to August 28th, 56.9% of people who visited XX company submitted project requests while 43.1% of people did not.
+
+### 2.1.3 
+
+```{r echo=FALSE, fig.align='center', fig.height=4.0, fig.width=4.0, message=FALSE, warning=FALSE}
+# Number of Visitors
+cat_device = visitors %>% group_by(device,category_name) %>%
+  summarise(num_visitors = length(category_name), num_requests = length(unique(request_id))-1) 
+cat_device$Conversion_Rate = cat_device$num_requests/cat_device$num_visitors
+df1 = cat_device %>% select(device, category_name, num_visitors)
+t1 = xtabs(num_visitors ~ device + category_name, data = df1)
+t1 = addmargins(xtabs(num_visitors ~ device + category_name, data = df1))
+kable(t1,align = 'c', caption = 'Number of Visitors') %>% kable_styling(full_width = F)
+```
+
+Some facts we can get from the table above:<br>
+The total number of visitors was equal to 59996. <br>
+The number of visitors on desktops(32295, 54%) was greater than that on mobile devices(27701, 46%).<br>
+There were more visitors who visited XX company for Local Moving(42649, 71%) compared to House Cleaning(17347, 29%).<br>
+
+```{r echo=FALSE, fig.align='center', fig.height=4.0, fig.width=4.0, message=FALSE, warning=FALSE}
+# Number of Requests
+df2 = cat_device %>% select(device, category_name, num_requests)
+t2 = addmargins(xtabs(num_requests ~ device + category_name, data = df2))
+kable(t2,align = 'c', caption = 'Number of Requests') %>% kable_styling(full_width = F)
+```
+
+The number of requests submitted from Desktops(18708) was greater than that submitted from Mobile devices(15438).<br>
+There were more visitors who sumbitted requests for Local Moving(23180) compared to House Cleaning(10966).<br>
+
+From the last two tables, we see that there were more visitors browing the website and submitting requests using desktops. Let's calculate the percentage of requests submitted on desktop and on mobile devices regardless of what service they needed:  
+<br>percentage of requests submitted on Desktop: $18708/32295 = 0.579$
+<br>percentage of requests submitted on Mobile: $15438/27701= 0.557$ 
+
+<br>So, the percentages of requests submitted on both devices are quite close with each other, with the one on desktop is slightly higher.
+ 
+The last two tables also show there were more visitors browing the website for Local Moving compared with House Cleaning and submitted request for that. Let's calculate the percentage of requests submitted for House Cleaning and for Local Moving regardless of what device they used:<br>
+<br>percentage of requests submitted for House Cleaning: $10966/17347 = 0.632$
+<br>percentage of requests submitted for Local Moving: $23180/42649= 0.544$ 
+
+So, although more people visited the website for Local Moving, the percentage of requests for it is about 10% lower than that for House Cleaning.
+ 
+Next, let's dig deeper and see if the requests of different categories hold different request rate on different devices.<br>
+<br>
+```{r echo=FALSE, fig.align='center', fig.height=6.0, fig.width=6.0, message=FALSE, warning=FALSE}
+# Number of Visitors VS Category - Desktop
+cat_device$difference = cat_device$num_visitors - cat_device$num_requests
+desktop = cat_device[c(1,2),]
+desktop$nr = 1-desktop$Conversion_Rate
+plot_ly(desktop, x = ~category_name, y = ~nr, type = 'bar', name = 'Not Requested') %>%
+  add_trace(y = ~Conversion_Rate, name = 'Requested') %>%
+  layout(title = 'Percentage of Visitors VS Category - Desktop', yaxis = list(title = 'Percentage'), xaxis = list(title = 'Category'), barmode = 'stack')
+
+# 'Number of Visitors VS Category - Mobile
+mobile = cat_device[c(3,4),] 
+mobile$nr = 1-mobile$Conversion_Rate
+plot_ly(mobile, x = ~category_name, y = ~nr, type = 'bar', name = 'Not Requested') %>%
+  add_trace(y = ~Conversion_Rate, name = 'Requested') %>%
+  layout(title = 'Percentage of Visitors VS Category - Mobile', yaxis = list(title = 'Percentage'), xaxis = list(title = 'Category'), barmode = 'stack')
+
+
+```
+
+From the above tables, it is clear that the percentage of requests for Housing Cleaning was greater than that for Local Moving on either device.<br>
+
+
+## 2.2 Quotes Per Request
+
+
+### 2.2.1 
+
+Data Cleaning is involved in this part of the analyses: request_id 7432 has 6 quotes, which should be an error since the number of quotes for each request should be between 0 and 5. Therefore, I removed that row and got the distribution plot of number of quotes per request as below with the rest of data.
+
+```{r echo=FALSE, fig.align='center', fig.height=5.5, fig.width=5, message=FALSE, warning=FALSE}
+# Number of quotes per id
+quotes = data.table::as.data.table(quotes)
+quote_req = quotes %>% group_by(request_id) %>% select(request_id, quote_id) %>% summarise(num_quotes = n())
+
+# Number of requests for different number of quotes
+quote_dist = quote_req %>% group_by(num_quotes) %>% summarise(num_requests = n()) 
+
+# There is a request id with number of quotes 6, which is not possible
+kable(quote_req[quote_req$num_quotes == 6,], align = 'c') %>% kable_styling(full_width = F) #request_id with 6 quotes
+
+# Remove observation which has request_id equal to 7432
+quote_req = quote_req[quote_req$num_quotes != 6,]
+quote_dist = quote_dist[quote_dist$num_quotes != 6,]
+
+quote_dist %>% plot_ly(x = ~num_quotes,y = ~num_requests, type = "bar") %>% 
+  layout(title = "Distribution of Number of Quotes per Request", yaxis =list(title = "Number of Requests"), xaxis =list(title = "Number of Quotes"))
+```
+
+There are a total of 26858 requests while 64229 quotes. From the bar chart we can see that most requests got 1~3 quotes, with the most of them getting 2 quotes. The distribution of number of requests per quote has a right skew with a heavy right-tail, meaning a large amount of requests got quotes no larger than 3. 
+
+
+```{r echo=FALSE, fig.align='center', fig.height=5.0, fig.width=5.0, message=FALSE, warning=FALSE}
+quote_dist %>% plot_ly(values = ~num_requests,labels = ~num_quotes, type = "pie") %>% 
+  layout(title = "Distribution of Number of Quotes per Request", yaxis =list(title = "Number of Requests"), xaxis =list(title = "Number of Quotes"))
+```
+ 
+
+A pie chart gives us a clearer look about the proportion of requests for different number of quotes. About 81% (28.4% + 29.7% + 23%) of the requests got 1~3 quotes. Requests with 2 quotes took about 30% while 11.7% of requests got 4 quotes and only 7% got 5 quotes.
+
+
+### 2.2.2  
+ 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Merge two datasets by "request_id"
+quote_visitors = merge(visitors,quotes, by = "request_id")
+req = quote_visitors %>% group_by(request_id) %>% summarise(
+  num_quotes = length(request_id),
+  category_name = unique(category_name),
+  how_far = unique(how_far),
+  num_bedrooms = unique(num_bedrooms),
+  num_bathrooms = unique(num_bathrooms)
+  )
+req = req[req$num_quotes != 6,]
+# Build a linear regression model
+f1 = lm(num_quotes~how_far+num_bedrooms+num_bathrooms,data=req)
+summary(f1)
+```
+
+To approach this problem, I merged the two datasets by their common column 'request_id' and removed the observation whose number of quotes equal to 6 as mentioned in the last problem. I then fitted a linear regression model with variables how_far, num_bedrooms and num_bathrooms where all of these three variables are treated as categorical variables. 
+
+From the above table, we can see that \textbf{distance} and \textbf{number of bathrooms} are the main factors which contribute to some requests getting more quotes than others. Requests which were "within the same building", "11 - 20 miles", "21 - 30 miles" and "31 - 50 miles" got more quotes than requests which were "less than or equal to 10 miles". Requests for 1-1.5 bathrooms got more quotes than requests for greater than or equal to 2 bathrooms.
+
+It needs to be noticed that this result is based on p-value (0.05 as significant level), which assumes all three variables are in the model, which means distance and number of bathrooms are statistically significant considering all three variables are in the model. So, it does not necessarily means the distance or the number of bathrooms does not affect the number of quotes for a request. It also does not mean the number of bedrooms does not have effects on the number of quotes.
+
+With that consideration, Chi-Sq Association Tests were then conducted to test if a single variable itself can affect the number of quotes for a request. Before looking at the results, we need to be clear about the hypothese of our tests and check if the assumptions of Chi-Sq test can be satisfied.
+
+Hypothesis:<br>
+Null hypothesis (H0): the two categorical variables of a contingency table are \textbf{independent}.<br>
+Alternative hypothesis (H1): the two categorical variables of a contingency table are \textbf{dependent}.
+
+In our case, "the two categorical variables" means "Number of Quotes and Distance", "Number of Quotes and Number of Bedrooms", or "Number of Quotes and Number of Bathrooms".
+
+Assumptions:<br>
+1.The levels (or categories) of the variables are mutually exclusive. 2. The value of the cell expecteds should be 5 or more in at least 80% of the cells, and no cell should have an expected of less than one. 3. Each subject may contribute data to one and only one cell in the ChiSq. 4. The study groups must be independent. 5. There are 2 variables, and both are measured as categories, usually at the nominal level. This is referred from <https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3900058/>. 
+
+After checking, our data satisfied the assumptions of the Chi-square (Details can be found in code). Therefore, the Chi-Sq tests were conducted for Number of Quotes VS Distance, Number of Quotes VS Number of Bedrooms, and Number of Quotes VS Number of Bathrooms as below.
+
+```{r echo=FALSE}
+req$num_quotes = factor(req$num_quotes)
+#table(req$num_quotes,req$how_far)
+#table(req$num_quotes,req$num_bedrooms)
+#table(req$num_quotes,req$num_bathrooms)
+chisq.test(req$num_quotes,req$how_far)
+chisq.test(req$num_quotes,req$num_bedrooms)
+chisq.test(req$num_quotes,req$num_bathrooms)
+```
+
+Three Chi-squared test showed us that each single variable Distance, Number of Bedrooms and Number of Bathrooms is NOT independent from the Number of Quotes. Therefore we can conclude that Distance and Number of Bathrooms are more significant factors when we consider all three factors together. However, each variable has associations with the Number of Quotes.
+
+
+## 2.3 Job Value
+
+
+### 2.3.1  
+
+```{r, warning = FALSE, message = FALSE, fig.align='center', fig.height=4.0, fig.width=4.0,}
+cat_dist = quote_visitors[!is.na(quote_visitors$quote_price),] 
+cat_dist = cat_dist[,c("category_name","quote_price")]
+qt1 = quantile(cat_dist[which(cat_dist$category_name == "House Cleaning (One Time)"),]$quote_price)
+qt2 = quantile(cat_dist[which(cat_dist$category_name != "House Cleaning (One Time)"),]$quote_price)
+
+qt2 = cbind.data.frame(category = "Local Moving (under 50 miles)",quantiles = names(qt2), prices = qt2)
+qt1 = cbind.data.frame(category = "House Cleaning (One Time)",quantiles = names(qt1), prices = qt1)
+category_dist = rbind.data.frame(qt1,qt2)
+category_dist = category_dist[category_dist$quantiles!="0%" & category_dist$quantiles!="100%",]
+ 
+category_dist %>% filter(category=="House Cleaning (One Time)") %>% plot_ly(x = ~quantiles,y = ~prices, type = "bar") %>% 
+  layout(title = "Distribution of House Cleaning Quotes", yaxis =list(title = "Prices"), xaxis =list(title = "Quantiles"))
+
+category_dist %>% filter(category!="House Cleaning (One Time)") %>% plot_ly(x = ~quantiles,y = ~prices, type = "bar", color = "Orange") %>% 
+  layout(title = "Distribution of Local Moving Quotes", yaxis =list(title = "Prices"), xaxis =list(title = "Quantiles"))
+```
+
+
+<br>The above plots are bar charts showing percentile of each quotes. We can see that there are 25% of quotes were priced at at most 99 dollars , 50% of quotes were priced at at most 140 dollars and 25% of quotes were priced at at least 185 dollars for House Cleaning Services. 
+
+<br>There are 25% of quotes were priced at at most 250 dollars , 50% of quotes were priced at at most 351 dollars and 25% of quotes were priced at at least 400 dollars for Local Moving Services. <br>
+
+
+### 2.3.2  
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+quote_visitors$hired = as.numeric(quote_visitors$hired)-1
+quote_visitors = quote_visitors %>% group_by(pro_id) %>% mutate(times_quoted = length(pro_id), times_hired = sum(hired))
+
+quote_visitors$hire_price = ifelse(quote_visitors$hired==1,quote_visitors$quote_price,0)
+
+pros = quote_visitors[!is.na(quote_visitors$quote_price),] %>% group_by(pro_id) %>% 
+  summarise(times_quoted = unique(times_quoted),times_hired = unique(times_hired),avg_earn = mean(hire_price),
+           avg_price_quote = mean(quote_price),total_earning = sum(hire_price))  
+
+per_hire = sum(pros$times_hired>0)/length(pros$times_hired)
+per_hire_quote = sum(pros[pros$times_quoted>1,]$times_hired>0)/length(pros[pros$times_quoted>1,]$times_hired)
+
+per_hire 
+per_hire_quote
+
+```
+
+<br>There are many NAs in quotes offered by pros who got hired which means that there is anomaly in the data. So, I thought it would be better to find the average quote by each professional and the average earning of a professional to explore how much XX company should charge professionals to quote so that each professional will benefit from sending quotes. Explainations of certain variables in "pros" are as below:<br>
+<br>total_earning = sum(hire_price)). hire_price is defined as quote_price when the professional got hired, otherwise it was equal to 0.<br>
+<br>avg_earn = total_earning/times_quoted<br>
+<br>avg_price_quote = mean(quote_price)<br>
+<br>26.16% of the pros were hired at least once of all professionals. Other pros were not hired at all.<br>
+<br>58.37% of the professionals who put up a quote more than once were hired at least once. <br>
+<br>We can see the fact that we have a high drop-off rate for professionals in case they are not getting hired for the first time. So, a good solution for new pros retention is that we don't charge them for a first few times till they are hired. But we should also not allow them to quote any price. Instead, we can limit their quote prices to a range which is derived based on a weighted average of hourly rates of the location and the rates at which professionals are hired for similar task in the locality.<br>
+
